@@ -170,7 +170,7 @@ type OpenSidebarMenu = `displayOptions:${string}` | null;
 function isCollapsibleSidebarSectionId(
   value: string,
 ): value is CollapsibleSidebarSectionId {
-  return value === "pinned" || value === "threads";
+  return value === "pinned" || value === "threads" || value === "parked";
 }
 
 const EMPTY_PROJECT_THREAD_LIST_STATE: ProjectThreadListState = {

@@ -346,6 +346,25 @@ describe("thread-list plugin", () => {
     setPreferencesMirrorStorageForTest(undefined);
   });
 
+  it("collapses everything below the Parked divider", async () => {
+    setPreferencesMirrorStorageForTest(null);
+    renderList({
+      organizationMode: "project",
+      sectionOrder: ["pinned", "project:proj_app", "threads", "parked", "project:proj_web"],
+    });
+
+    await screen.findByText("Pinned thread");
+    expect(sectionHeaders()).toEqual(["Pinned", "App", "Threads", "Parked", "Web"]);
+    fireEvent.click(screen.getByRole("button", { name: "Collapse Parked section" }));
+    await waitFor(() =>
+      expect(sectionHeaders()).toEqual(["Pinned", "App", "Threads", "Parked"]),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Expand Parked section" }));
+    await waitFor(() =>
+      expect(sectionHeaders()).toEqual(["Pinned", "App", "Threads", "Parked", "Web"]),
+    );
+  });
+
   it.each([true, false])(
     "renders personal rows once with standard projects: %s",
     async (includeStandardProjects) => {
