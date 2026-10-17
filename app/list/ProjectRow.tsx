@@ -155,6 +155,7 @@ import {
   useSectionThreadDnd,
   type SectionThreadDndState,
 } from "../dnd/useSectionThreadDnd.js";
+import { useManualThreadReorder } from "./useManualThreadReorder.js";
 import {
   getSidebarThreadRowDroppableId,
   type ThreadRowNestDrop,
@@ -2103,6 +2104,7 @@ export const ChronologicalSectionThreadSections = memo(
         groupThreadsByEnvironment,
       ],
     );
+    const manualReorder = useManualThreadReorder();
     const sectionDnd = useSectionThreadDnd({
       containerId: CHRONOLOGICAL_CONTAINER_ID,
       enabled: true,
@@ -2115,6 +2117,7 @@ export const ChronologicalSectionThreadSections = memo(
       pinnedRootItems,
       pinnedRootNodes,
       onReorderPinnedThread,
+      onReorderManualThread: manualReorder,
     });
     const renderedSectionDnd = useNestDropPreview({
       compareThreads,

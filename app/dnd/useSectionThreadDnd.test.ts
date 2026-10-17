@@ -103,6 +103,38 @@ function createLookupWithPinnedThread(overrides: SidebarThreadOverrides = {}) {
   );
 }
 
+describe("manual order drops", () => {
+  function siblingsLookup() {
+    return collectSectionThreadDndLookup(
+      buildSectionThreadList(
+        [
+          createThread({ id: "first-mate", createdAt: 1 }),
+          createThread({ id: "moonshot", createdAt: 2 }),
+        ],
+        undefined,
+        [],
+      ),
+      CHRONOLOGICAL_CONTAINER_ID,
+    );
+  }
+
+  it("reorders a thread dropped on a sibling when the order is manual", () => {
+    const lookup = siblingsLookup();
+    expect(
+      resolveSectionThreadDropDecision(lookup, "first-mate", "moonshot", null, null, {
+        manualOrder: true,
+      }),
+    ).toMatchObject({ kind: "reorder-manual", activeId: "first-mate", overId: "moonshot" });
+  });
+
+  it("leaves the same drop unchanged under an automatic sort", () => {
+    const lookup = siblingsLookup();
+    expect(
+      resolveSectionThreadDropDecision(lookup, "first-mate", "moonshot"),
+    ).toMatchObject({ kind: "unchanged" });
+  });
+});
+
 describe("section thread drop targets", () => {
   it("moves a loose thread onto an empty section header", () => {
     const lookup = createLookup();

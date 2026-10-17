@@ -31,6 +31,8 @@ export const sidebarGroupThreadsByEnvironmentAtom = atom((get) => {
 });
 export const sidebarChronologicalSortAtom =
   createSyncedPreferenceAtom("chronologicalSort");
+export const sidebarManualThreadOrderAtom =
+  createSyncedPreferenceAtom("manualThreadOrder");
 export const sidebarSortDirectionAtom =
   createSyncedPreferenceAtom("sortDirection");
 export const sidebarCollapsedThreadSectionsAtom = createSyncedPreferenceAtom(

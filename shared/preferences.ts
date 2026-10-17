@@ -17,6 +17,7 @@ export const chronologicalSortSchema = z.enum([
   "updated",
   "created",
   "alpha",
+  "manual",
   "none",
 ]);
 export type ChronologicalSort = z.infer<typeof chronologicalSortSchema>;
@@ -99,7 +100,7 @@ export const preferenceDefinitions = {
   chronologicalSort: definePreference(
     chronologicalSortSchema,
     "updated",
-    "Sort field for the chronological organization.",
+    "Sort field for threads: updated, created, alpha, or manual (your dragged order, never moved by activity).",
     "sidebar.chronologicalSort",
   ),
   sortDirection: definePreference(
@@ -143,6 +144,12 @@ export const preferenceDefinitions = {
     [],
     "Project ids whose rows are collapsed.",
     "sidebar.collapsedProjects",
+  ),
+  manualThreadOrder: definePreference(
+    stringListSchema,
+    [],
+    "Thread ids in the order you dragged them, used when the sort is manual. Threads not listed (new ones) sit above the listed ones, newest first.",
+    null,
   ),
   collapsedThreads: definePreference(
     stringListSchema,

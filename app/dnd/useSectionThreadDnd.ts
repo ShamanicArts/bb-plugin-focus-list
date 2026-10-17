@@ -53,6 +53,10 @@ import {
 
 export const PINNED_THREAD_PARENT_KEY = "sidebar:pinned-threads";
 export const NEST_BAND_FRACTION = 0.7;
+// Manual order makes reordering the common gesture: rows slide apart to preview the drop,
+// and nesting needs a deliberate hold over the middle of a row.
+export const MANUAL_NEST_BAND_FRACTION = 0.4;
+export const MANUAL_NEST_HOVER_DELAY_MS = 600;
 export const NEST_BAND_ARMED_FRACTION = 1;
 export const NEST_CANCEL_OFFSET_PX = 12;
 export const NEST_HOVER_DELAY_MS = 200;
@@ -99,6 +103,8 @@ export interface SectionThreadDndState {
   reorderTarget: SectionThreadReorderTarget | null;
   pinnedItemIds: readonly string[];
   pinnedReorderPending: boolean;
+  /** Rows preview a reorder by sliding apart (manual order). */
+  manualOrder?: boolean;
 }
 
 interface UseSectionThreadDndArgs {
@@ -117,6 +123,13 @@ interface UseSectionThreadDndArgs {
     request: NeighborReorderRequest,
     callbacks: { onSettled: () => void },
   ) => void;
+  /** Present when the sidebar sorts by the user's own order. */
+  onReorderManualThread?: (request: {
+    activeId: string;
+    targetId: string;
+    placement: SidebarReorderPlacement;
+    siblingIds: string[];
+  }) => void;
 }
 
 interface SectionThreadDndLookup {
@@ -153,6 +166,12 @@ export type SectionThreadDropDecision =
   | ({ kind: "nest"; parentThreadId: string } & SectionThreadDropChanges)
   | ({ kind: "pin" } & SectionThreadDropChanges)
   | { kind: "reorder-pinned"; activeId: string; overId: string }
+  | {
+      kind: "reorder-manual";
+      activeId: string;
+      overId: string;
+      siblingIds: string[];
+    }
   | {
       kind: "rejected";
       activeId: string;
@@ -506,6 +525,7 @@ function resolveSectionThreadDropParentKey(
 
 interface ResolveSectionThreadDropDecisionOptions {
   groups?: boolean;
+  manualOrder?: boolean;
 }
 
 function getPinnedThreadIds(threads: readonly SidebarThread[]): string[] {
@@ -681,6 +701,18 @@ export function resolveSectionThreadDropDecision(
     return detach ? [{ threadId: thread.id, parentThreadId: null }] : [];
   });
   if (unpinThreadIds.length === 0 && updates.length === 0) {
+    const siblingIds = lookup.itemIdsByParentKey.get(toParentKey) ?? [];
+    if (
+      options.manualOrder === true &&
+      overId !== null &&
+      overId !== activeId &&
+      fromParentKey === toParentKey &&
+      lookup.itemKindById.get(activeId) === "thread" &&
+      lookup.itemKindById.get(overId) === "thread" &&
+      siblingIds.includes(overId)
+    ) {
+      return { kind: "reorder-manual", activeId, overId, siblingIds: [...siblingIds] };
+    }
     return { kind: "unchanged", activeId, toParentKey };
   }
   return {
@@ -863,6 +895,7 @@ function hasDropDecisionLanded(
           lookup.nestParentIdByItemId.get(threadId) === decision.parentThreadId,
       );
     case "reorder-pinned":
+    case "reorder-manual":
     case "rejected":
     case "unchanged":
       return true;
@@ -882,6 +915,7 @@ export function useSectionThreadDnd({
   pinnedRootItems,
   pinnedRootNodes,
   onReorderPinnedThread,
+  onReorderManualThread,
 }: UseSectionThreadDndArgs): SectionThreadDndState | null {
   const lookup = useMemo(
     () =>
@@ -901,7 +935,11 @@ export function useSectionThreadDnd({
       rootItems,
     ],
   );
-  const decisionOptions = useMemo(() => ({ groups }), [groups]);
+  const manualOrder = onReorderManualThread !== undefined;
+  const decisionOptions = useMemo(
+    () => ({ groups, manualOrder }),
+    [groups, manualOrder],
+  );
   const topLevelSectionIds = useMemo(
     () => new Set<string>(topLevelSectionOrder),
     [topLevelSectionOrder],
@@ -938,10 +976,10 @@ export function useSectionThreadDnd({
       nestCandidateTimerRef.current = setTimeout(() => {
         nestCandidateTimerRef.current = null;
         setReadyNestCandidate(candidate);
-      }, NEST_HOVER_DELAY_MS);
+      }, manualOrder ? MANUAL_NEST_HOVER_DELAY_MS : NEST_HOVER_DELAY_MS);
       return false;
     },
-    [clearNestCandidate, readyNestCandidate],
+    [clearNestCandidate, manualOrder, readyNestCandidate],
   );
   const isPinnedItem = useCallback(
     (itemId: string) =>
@@ -953,6 +991,21 @@ export function useSectionThreadDnd({
       isPinnedItem(itemId) && !lookup.nestParentIdByItemId.has(itemId),
     [isPinnedItem, lookup],
   );
+  // Manual order: the row under the pointer shows a drop line above or below itself,
+  // for any other root thread in the dragged thread's own list.
+  const isManualSibling = useCallback(
+    (activeId: string, threadId: string) => {
+      if (!manualOrder || threadId === activeId) return false;
+      const parentKey = lookup.parentKeyByItemId.get(activeId);
+      return (
+        parentKey !== undefined &&
+        parentKey !== PINNED_THREAD_PARENT_KEY &&
+        lookup.parentKeyByItemId.get(threadId) === parentKey &&
+        lookup.itemKindById.get(threadId) === "thread"
+      );
+    },
+    [lookup, manualOrder],
+  );
   const getNestBandFraction = useCallback(
     (threadId: string): number | null => {
       const activeId = activeIdRef.current;
@@ -960,27 +1013,22 @@ export function useSectionThreadDnd({
       if (lookup.itemKindById.get(threadId) !== "thread") return null;
       const armed = armedNestThreadIdRef.current === threadId;
       if (coarsePointerRef.current) return 1;
-      return armed ? NEST_BAND_ARMED_FRACTION : NEST_BAND_FRACTION;
+      if (armed) return NEST_BAND_ARMED_FRACTION;
+      return manualOrder ? MANUAL_NEST_BAND_FRACTION : NEST_BAND_FRACTION;
     },
-    [lookup],
+    [lookup, manualOrder],
   );
   const handleRowPointer = useCallback(
     ({ threadId, relativeY, nesting }: ThreadRowPointerInfo) => {
       const activeId = activeIdRef.current;
-      if (
-        activeId === null ||
-        nesting ||
-        isPinnedRoot(activeId) ||
-        !isPinnedRoot(threadId)
-      ) {
-        return;
-      }
+      if (activeId === null || nesting || isPinnedRoot(activeId)) return;
+      if (!isPinnedRoot(threadId) && !isManualSibling(activeId, threadId)) return;
       pinnedInsertRef.current = {
         threadId,
         placement: relativeY < 0.5 ? "before" : "after",
       };
     },
-    [isPinnedRoot],
+    [isManualSibling, isPinnedRoot],
   );
   const handleResolvedRow = useCallback(
     ({ threadId, rect, retaining }: ResolvedThreadRowInfo) => {
@@ -1356,8 +1404,29 @@ export function useSectionThreadDnd({
           handlePinnedDragEnd(event);
           clearProjectedDrag();
           return;
+        case "reorder-manual":
+        case "unchanged": {
+          const target = reorderTarget;
+          if (
+            onReorderManualThread &&
+            target !== null &&
+            isManualSibling(activeId, target.threadId)
+          ) {
+            onReorderManualThread({
+              activeId,
+              targetId: target.threadId,
+              placement: target.placement,
+              siblingIds: [
+                ...(lookup.itemIdsByParentKey.get(
+                  lookup.parentKeyByItemId.get(activeId) ?? "",
+                ) ?? []),
+              ],
+            });
+          }
+          clearProjectedDrag();
+          return;
+        }
         case "rejected":
-        case "unchanged":
           clearProjectedDrag();
           return;
       }
@@ -1374,6 +1443,8 @@ export function useSectionThreadDnd({
       handlePinnedDragEnd,
       lookup,
       onReorderPinnedThread,
+      onReorderManualThread,
+      isManualSibling,
       onTopLevelSectionOrderChange,
       projectedNestParentId,
       reorderTarget,
@@ -1418,9 +1489,12 @@ export function useSectionThreadDnd({
       dropDecisionLanded || reorderTarget !== null ? null : unchangedParentKey,
     nestTarget: dropDecisionLanded ? null : rowDrop,
     nestPreviewBeforeKey: null,
-    reorderTarget: dropDecisionLanded ? null : reorderTarget,
+    // An armed nest wins: never show a drop line and a nest target at once.
+    reorderTarget:
+      dropDecisionLanded || rowDrop?.state === "valid" ? null : reorderTarget,
     pinnedItemIds:
       lookup.itemIdsByParentKey.get(PINNED_THREAD_PARENT_KEY) ?? [],
     pinnedReorderPending,
+    manualOrder,
   };
 }

@@ -7,7 +7,7 @@ description: "Inspect or change the Focus list sidebar: focus decay (fold and fa
 
 The Focus list plugin (a fork of BB's thread list) owns the sidebar's layout state. Read it with
 `bb focus-list prefs list --json`; keys are `focusFoldDays`, `focusFadeDays`, `showProviderIcons`, `threadLifecycles`, `organizationMode`,
-`environmentGrouping`, `chronologicalSort`, `sortDirection`, `sectionOrder`,
+`environmentGrouping`, `chronologicalSort`, `manualThreadOrder`, `sortDirection`, `sectionOrder`,
 `manualSectionOrder`, `machineSectionOrder`, `hiddenGroups` (including the
 built-in `threads` group),
 `collapsedSections`, `collapsedProjects`, `collapsedThreads`,
@@ -41,6 +41,17 @@ Organize → Rows → Provider icons toggles the icon before each thread title.
 `showProviderIcons` defaults to `false`; use
 `bb focus-list prefs set showProviderIcons true` to show them. Unknown
 provider ids have no icon.
+
+## Manual order
+
+`chronologicalSort` `manual` (Sort → "Manual (drag to arrange)") orders threads by
+`manualThreadOrder`, a list of thread ids, and nothing else: activity, unread state
+and running work never move a thread. While dragging, a drop line shows above or
+below the row under the pointer and the drop lands exactly there; holding still over
+the middle of a row for about 0.6s switches to nesting (the row highlights, the line
+disappears). Threads
+missing from the list (new ones) sit above the listed ones, newest first, until
+dragged. Focus decay still folds idle threads away.
 
 ## Focus decay
 

@@ -104,6 +104,7 @@ import {
   sidebarChronologicalSortAtom,
   sidebarGroupThreadsByEnvironmentAtom,
   sidebarSortDirectionAtom,
+  sidebarManualThreadOrderAtom,
   sidebarCollapsedMachinesAtom,
   sidebarManualSectionOrderAtom,
   sidebarOrganizationModeAtom,
@@ -128,6 +129,8 @@ import {
 import { ReorderableSidebarSectionOrderList } from "./ReorderableSidebarSectionOrderList.js";
 import { useSidebarModeSectionOrder } from "./useSidebarModeSectionOrder.js";
 import { haveSameOrder } from "../model/stored-order.js";
+import { buildManualRank } from "../model/manual-thread-order.js";
+import { useManualThreadReorder } from "./useManualThreadReorder.js";
 import {
   useSidebarData,
   useSidebarMachineHosts,
@@ -305,8 +308,21 @@ export function getSidebarThreadComparator(
   sort: SidebarChronologicalSort,
   direction: SidebarSortDirection = "default",
   rename: ActiveRename = null,
+  manualOrder: readonly string[] = [],
 ): ThreadComparator {
   const normalizedSort = sort === "none" ? "updated" : sort;
+  if (normalizedSort === "manual") {
+    const rank = buildManualRank(manualOrder);
+    return (left, right) => {
+      const leftRank = rank.get(left.id);
+      const rightRank = rank.get(right.id);
+      if (leftRank === undefined || rightRank === undefined) {
+        if (leftRank !== rightRank) return leftRank === undefined ? -1 : 1;
+        return compareByCreatedAtDescending(left, right);
+      }
+      return leftRank - rightRank;
+    };
+  }
 
   const multiplier =
     direction === "default" ||
@@ -492,6 +508,7 @@ function useGroupedModeThreadDnd({
     },
     [collapsedThreadIds, onToggleThreadCollapsed],
   );
+  const manualReorder = useManualThreadReorder();
   const threadDnd = useSectionThreadDnd({
     containerId: CHRONOLOGICAL_CONTAINER_ID,
     enabled: true,
@@ -505,6 +522,7 @@ function useGroupedModeThreadDnd({
     pinnedRootItems: pinned.pinnedRootItems,
     pinnedRootNodes: pinned.pinnedRootNodes,
     onReorderPinnedThread: pinned.onReorderPinnedThread,
+    onReorderManualThread: manualReorder,
   });
   return useNestDropPreview({
     compareThreads,
@@ -1647,6 +1665,7 @@ function ProjectListComponent({
     sidebarChronologicalSortAtom,
   );
   const sortDirection = useAtomValue(sidebarSortDirectionAtom);
+  const manualThreadOrder = useAtomValue(sidebarManualThreadOrderAtom);
   const activeRename = useSidebarRenameState();
   const sidebarThreadComparator = useMemo<ThreadComparator>(
     () =>
@@ -1654,8 +1673,9 @@ function ProjectListComponent({
         chronologicalSort,
         sortDirection,
         activeRename,
+        manualThreadOrder,
       ),
-    [chronologicalSort, sortDirection, activeRename],
+    [chronologicalSort, sortDirection, activeRename, manualThreadOrder],
   );
   const collapsedThreadIds = useMemo(
     () => new Set(collapsedThreadIdList),
